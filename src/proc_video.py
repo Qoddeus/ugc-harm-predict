@@ -7,7 +7,7 @@ import ffmpeg
 import os
 import numpy as np
 import torch
-from src.utils import preprocess_image
+from src.utils import preprocess_image, select_diverse_frames
 
 def extract_frames(video_path, output_dir, resnet_model, class_names, batch_size=32, progress_callback=None):
     os.makedirs(output_dir, exist_ok=True)
@@ -18,6 +18,7 @@ def extract_frames(video_path, output_dir, resnet_model, class_names, batch_size
     batch_tensors = [] # for batch processing
     predictions_per_frame = []
     confidence_scores_by_class = {class_name: [] for class_name in class_names}
+    nsfw_frames = []  # Store frame numbers with NSFW content
     device = next(resnet_model.parameters()).device
 
     while True:
@@ -46,9 +47,18 @@ def extract_frames(video_path, output_dir, resnet_model, class_names, batch_size
 
             # Process results for each frame in the batch
             for i, (frame, prediction) in enumerate(zip(batch_frames, predictions)):
+                frame_index = frame_count - len(batch_frames) + i + 1
                 predicted_class_index = np.argmax(prediction)
                 predicted_class_name = class_names[predicted_class_index]
                 confidence = prediction[predicted_class_index]
+
+                # Store NSFW frames
+                if predicted_class_name == "nsfw" and confidence > 0.3:  # Threshold to avoid false positives (normal 0.6)
+                    nsfw_frames.append({
+                        "frame_number": frame_index,
+                        "confidence": float(confidence),
+                        "path": f"frame_{frame_index:04d}.jpg"
+                    })
 
                 # Color coding: Green for "safe", Red for "harmful"
                 text_color = (0, 255, 0) if predicted_class_name == "safe" else (0, 0, 255)
@@ -78,7 +88,11 @@ def extract_frames(video_path, output_dir, resnet_model, class_names, batch_size
             batch_tensors = []
 
     cap.release()
-    return frame_count, predictions_per_frame, confidence_scores_by_class
+
+    # Select a subset of diverse NSFW frames if there are many
+    selected_nsfw_frames = select_diverse_frames(nsfw_frames, max_frames=5)
+
+    return frame_count, predictions_per_frame, confidence_scores_by_class, selected_nsfw_frames
 
 def combine_frames_to_video(output_dir, output_video_path, frame_count, audio_path, frame_rate=30):
     temp_video_path = "./temp_video.mp4"

@@ -42,6 +42,32 @@ def get_total_frames(video_path):
     cap.release()
     return total
 
+# function to select diverse frames to avoid showing similar ones
+def select_diverse_frames(nsfw_frames, max_frames=5):
+    if not nsfw_frames:
+        return []
+
+    if len(nsfw_frames) <= max_frames:
+        return nsfw_frames
+
+    # Sort by confidence first
+    sorted_frames = sorted(nsfw_frames, key=lambda x: x['confidence'], reverse=True)
+
+    # Take top frame and then select frames that are spaced out
+    selected = [sorted_frames[0]]
+
+    # Try to select frames that are spaced out
+    spacing = max(1, len(nsfw_frames) // max_frames)
+    remaining_slots = max_frames - 1
+
+    for i in range(spacing, len(sorted_frames), spacing):
+        if remaining_slots <= 0:
+            break
+        selected.append(sorted_frames[i])
+        remaining_slots -= 1
+
+    return selected
+
 def save_results(output_dir, video_name, results):
     history_file = "./saves/processed_videos.json"
 
