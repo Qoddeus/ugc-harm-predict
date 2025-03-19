@@ -19,6 +19,7 @@ def extract_frames(video_path, output_dir, resnet_model, class_names, batch_size
     predictions_per_frame = []
     confidence_scores_by_class = {class_name: [] for class_name in class_names}
     nsfw_frames = []  # Store frame numbers with NSFW content
+    violence_frames = []  # Store frame numbers with violence content
     device = next(resnet_model.parameters()).device
 
     while True:
@@ -53,15 +54,31 @@ def extract_frames(video_path, output_dir, resnet_model, class_names, batch_size
                 confidence = prediction[predicted_class_index]
 
                 # Store NSFW frames
-                if predicted_class_name == "nsfw" and confidence > 0.3:  # Threshold to avoid false positives (normal 0.6)
+                if predicted_class_name == "nsfw" and confidence > 0.3:  # Threshold to avoid false positives
                     nsfw_frames.append({
                         "frame_number": frame_index,
                         "confidence": float(confidence),
-                        "path": f"frame_{frame_index:04d}.jpg"
+                        "path": f"frame_{frame_index:04d}.jpg",
+                        "type": "nsfw"
+                    })
+                
+                # Store violence frames
+                if predicted_class_name == "violence" and confidence > 0.3:  # Same threshold for consistency
+                    violence_frames.append({
+                        "frame_number": frame_index,
+                        "confidence": float(confidence),
+                        "path": f"frame_{frame_index:04d}.jpg",
+                        "type": "violence"
                     })
 
-                # Color coding: Green for "safe", Red for "harmful"
-                text_color = (0, 255, 0) if predicted_class_name == "safe" else (0, 0, 255)
+                # Color coding: Green for "safe", Red for "harmful" (NSFW), Orange for "violence"
+                if predicted_class_name == "safe":
+                    text_color = (0, 255, 0)  # Green
+                elif predicted_class_name == "nsfw":
+                    text_color = (0, 0, 255)  # Red
+                else:  # violence
+                    text_color = (0, 165, 255)  # Orange in BGR
+                
                 bg_color = (0, 0, 0)  # Black background
                 text = f"Predicted: {predicted_class_name} ({confidence:.4f})"
 
@@ -92,7 +109,16 @@ def extract_frames(video_path, output_dir, resnet_model, class_names, batch_size
     # Select a subset of diverse NSFW frames if there are many
     selected_nsfw_frames = select_diverse_frames(nsfw_frames, max_frames=5)
 
-    return frame_count, predictions_per_frame, confidence_scores_by_class, selected_nsfw_frames
+    # Select a subset of diverse violence frames if there are many
+    selected_violence_frames = select_diverse_frames(violence_frames, max_frames=5)
+    
+    # Combine both types of harmful frames
+    harmful_frames = selected_nsfw_frames + selected_violence_frames
+    
+    # Sort by frame number for chronological display
+    harmful_frames.sort(key=lambda x: x["frame_number"])
+    
+    return frame_count, predictions_per_frame, confidence_scores_by_class, harmful_frames
 
 def combine_frames_to_video(output_dir, output_video_path, frame_count, audio_path, frame_rate=30):
     temp_video_path = "./temp_video.mp4"
