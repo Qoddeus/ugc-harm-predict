@@ -1,7 +1,8 @@
 ### src/models_laod.py
-### load and initilize all models
 
 
+# IMPORTS
+# __________________________________________________________________
 import torch
 from transformers import BertTokenizer, pipeline
 from src.models_def import BertClassifier, ResNetModel
@@ -37,4 +38,4 @@ def load_models():
     }
 
 
-### end
+### END

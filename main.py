@@ -1,23 +1,26 @@
 ### main.py
-### user interface app
 
 
+### IMPORTS
+### ________________________________________________________________
+import cv2
 import os
 import json
-import cv2
 import streamlit as st
+from streamlit_pdf_viewer import pdf_viewer
 import webbrowser
 from pytubefix import YouTube
 from src.models_load import load_models
 from src.proc_audio import extract_audio, transcribe_audio, display_transcription_with_timestamps
 from src.proc_text import classify_text
 from src.proc_video import extract_frames, combine_frames_to_video
-from src.utils import sanitize_filename, save_results, weighted_fusion, calculate_average_scores, get_total_frames
+from src.utils import sanitize_filename, save_results, weighted_fusion, calculate_average_scores, get_total_frames, save_to_pdf
 
 
+### FUNCTIONS
+### ________________________________________________________________
 def create_clickable_blog_post_with_image(title, url, summary, image_url, fixed_width="500px", fixed_height="400px"):
-    """Creates a clickable blog post element with an image preview and fixed size."""
-
+    # Creates a clickable blog post element with an image preview and fixed size.
     st.markdown(
         f"""
         <div style="width: {fixed_width}; height: {fixed_height}; border: 1px solid #e0e0e0; padding: 10px; margin-bottom: 10px; border-radius: 5px; display: flex; flex-direction: column;">
@@ -29,22 +32,14 @@ def create_clickable_blog_post_with_image(title, url, summary, image_url, fixed_
         </div>
         """,
         unsafe_allow_html=True,
-    )
-
+     )
 
 def home_page():
-    # st.markdown("<h1 style='text-align: center; color: Black;'>BuddyGuard</h1>", unsafe_allow_html=True)
-
     # Center the image
     st.markdown(
         """
         <style>
-        .centered-image {
-            display: block;
-            margin-left: auto;
-            margin-right: auto;
-            width: 200px; /* Or whatever width you need */
-        }
+        .centered-image { display: block; margin-left: auto; margin-right: auto; width: 200px;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -122,7 +117,6 @@ def home_page():
                     create_clickable_blog_post_with_image(post["title"], post["url"], post["summary"],
                                                           post["image_url"])
 
-
 def is_portrait_video(video_path):
     cap = cv2.VideoCapture(video_path)
     ret, frame = cap.read()
@@ -139,18 +133,9 @@ def upload_process_page():
     # Add CSS to control video size
     st.markdown("""
     <style>
-    .portrait-video video {
-        max-height: 200px !important;
-        margin: 0 auto;
-        display: block;
-    }
-    .stImage {
-    margin-bottom: 10px;
-    }
-    .stImage img {
-        border-radius: 5px;
-        border: 1px solid #ddd;
-    }
+        .portrait-video video { max-height: 200px !important; margin: 0 auto; display: block; }
+        .stImage { margin-bottom: 10px; }
+        .stImage img { border-radius: 5px; border: 1px solid #ddd; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -318,9 +303,7 @@ def upload_process_page():
                     st.warning("Process cancelled by user")
                     st.stop()
 
-                text_label, harmful_conf_text, safe_conf_text, highlighted_text = classify_text(transcription,
-                                                                                                bert_model, tokenizer,
-                                                                                                device)
+                text_label, harmful_conf_text, safe_conf_text, highlighted_text = classify_text(transcription, bert_model, tokenizer, device)
                 update_progress()
 
                 # Process video frames with progress callback and cancel check
@@ -346,15 +329,12 @@ def upload_process_page():
                 harmful_classes = ['nsfw', 'violence']
                 safe_classes = ['safe']
                 average_confidence_by_class = calculate_average_scores(confidence_scores_by_class)
-                harmful_score_resnet = sum(
-                    average_confidence_by_class[class_name] for class_name in harmful_classes) / len(harmful_classes)
-                safe_score_resnet = sum(average_confidence_by_class[class_name] for class_name in safe_classes) / len(
-                    safe_classes)
+                harmful_score_resnet = sum(average_confidence_by_class[class_name] for class_name in harmful_classes) / len(harmful_classes)
+                safe_score_resnet = sum(average_confidence_by_class[class_name] for class_name in safe_classes) / len(safe_classes)
 
                 bert_scores = {'safe': safe_conf_text, 'harmful': harmful_conf_text}
                 resnet_scores = {'safe': safe_score_resnet, 'harmful': harmful_score_resnet}
-                final_prediction, final_confidence = weighted_fusion(bert_scores, resnet_scores, bert_weight=0.5,
-                                                                     resnet_weight=0.5)
+                final_prediction, final_confidence = weighted_fusion(bert_scores, resnet_scores, bert_weight=0.5, resnet_weight=0.5)
 
                 # Check for cancel request before continuing
                 if st.session_state.cancel_processing:
@@ -381,8 +361,7 @@ def upload_process_page():
                     "transcription": transcription,
                     "highlighted_text": highlighted_text,
                     "harmful_frames": harmful_frames,  # Updated from nsfw_frames to harmful_frames
-                    "nsfw_frames": [frame for frame in harmful_frames if
-                                    frame.get('type') == 'nsfw' or 'type' not in frame],  # For backward compatibility
+                    "nsfw_frames": [frame for frame in harmful_frames if frame.get('type') == 'nsfw' or 'type' not in frame],  # For backward compatibility
                     "frames_path": frames_path
                 }
                 save_results(output_dir, video_name, results)
@@ -413,40 +392,31 @@ def upload_process_page():
                     # Create metrics in a row
                     metric_col1, metric_col2, metric_col3 = st.columns(3)
                     with metric_col1:
-                        st.metric("Text Harmful", f"{(1 - results['safe_conf_text']) * 100:.2f}%",
-                                  f"{(0.5 - results['safe_conf_text']) * 200:.2f}%" if results[
-                                                                                           'safe_conf_text'] < 0.5 else f"{(0.5 - results['safe_conf_text']) * 200:.2f}%")
+                        st.metric("Text Harmful", f"{(1-results['safe_conf_text'])*100:.2f}%",
+                                 f"{(0.5-results['safe_conf_text'])*200:.2f}%" if results['safe_conf_text'] < 0.5 else f"{(0.5-results['safe_conf_text'])*200:.2f}%")
                     with metric_col2:
-                        st.metric("Visual Harmful", f"{(1 - results['safe_score_resnet']) * 100:.2f}%",
-                                  f"{(0.5 - results['safe_score_resnet']) * 200:.2f}%" if results[
-                                                                                              'safe_score_resnet'] < 0.5 else f"{(0.5 - results['safe_score_resnet']) * 200:.2f}%")
+                        st.metric("Visual Harmful", f"{(1-results['safe_score_resnet'])*100:.2f}%",
+                                 f"{(0.5-results['safe_score_resnet'])*200:.2f}%" if results['safe_score_resnet'] < 0.5 else f"{(0.5-results['safe_score_resnet'])*200:.2f}%")
                     with metric_col3:
-                        st.metric("Overall Harmful", f"{results['final_confidence'] * 100:.2f}%" if results[
-                                                                                                        'final_prediction'] == "Harmful" else f"{(1 - results['final_confidence']) * 100:.2f}%",
-                                  "Harmful" if results['final_prediction'] == "Harmful" else "Safe")
+                        st.metric("Overall Harmful", f"{results['final_confidence']*100:.2f}%" if results['final_prediction'] == "Harmful" else f"{(1-results['final_confidence'])*100:.2f}%",
+                                 "Harmful" if results['final_prediction'] == "Harmful" else "Safe")
 
                     # Detailed results in expanders
                     with st.expander("📝 Text Analysis"):
                         st.write("#### Text Classification")
-                        st.progress(results['safe_conf_text'],
-                                    text=f"Safe Content: {results['safe_conf_text'] * 100:.2f}%")
-                        st.progress(results['harmful_conf_text'],
-                                    text=f"Harmful Content: {results['harmful_conf_text'] * 100:.2f}%")
+                        st.progress(results['safe_conf_text'], text=f"Safe Content: {results['safe_conf_text']*100:.2f}%")
+                        st.progress(results['harmful_conf_text'], text=f"Harmful Content: {results['harmful_conf_text']*100:.2f}%")
 
                         st.write("#### Highlighted Toxic Content")
-                        st.markdown(f"<div style='font-size:16px;'>{results['highlighted_text']}</div>",
-                                    unsafe_allow_html=True)
+                        st.markdown(f"<div style='font-size:16px;'>{results['highlighted_text']}</div>", unsafe_allow_html=True)
 
                     with st.expander("🎬 Visual Analysis"):
                         st.write("#### Visual Classification")
-                        st.progress(results['safe_score_resnet'],
-                                    text=f"Safe Content: {results['safe_score_resnet'] * 100:.2f}%")
-                        st.progress(results['harmful_score_resnet'],
-                                    text=f"Harmful Content: {results['harmful_score_resnet'] * 100:.2f}%")
+                        st.progress(results['safe_score_resnet'], text=f"Safe Content: {results['safe_score_resnet']*100:.2f}%")
+                        st.progress(results['harmful_score_resnet'], text=f"Harmful Content: {results['harmful_score_resnet']*100:.2f}%")
 
                         # Display harmful frames if available
-                        if ('harmful_frames' in results and results['harmful_frames']) or (
-                                'nsfw_frames' in results and results['nsfw_frames']):
+                        if ('harmful_frames' in results and results['harmful_frames']) or ('nsfw_frames' in results and results['nsfw_frames']):
                             st.write("#### Detected Harmful Frames")
 
                             # Get the frames from either harmful_frames or nsfw_frames (for backward compatibility)
@@ -458,8 +428,7 @@ def upload_process_page():
                             if has_type_attribute:
                                 # Group frames by type
                                 nsfw_frames = [frame for frame in frames_to_display if frame.get('type') == 'nsfw']
-                                violence_frames = [frame for frame in frames_to_display if
-                                                   frame.get('type') == 'violence']
+                                violence_frames = [frame for frame in frames_to_display if frame.get('type') == 'violence']
 
                                 # Handle frames without type (legacy data) - assume they are NSFW
                                 untyped_frames = [frame for frame in frames_to_display if 'type' not in frame]
@@ -568,7 +537,6 @@ def upload_process_page():
                         st.session_state.uploaded_video = None
                         st.session_state.cancel_processing = False
 
-
 def history_page():
     st.title("View Processed Videos")
 
@@ -623,7 +591,7 @@ def history_page():
             st.markdown(f"""
             <div style='padding: 10px; border-radius: 5px; background-color: {verdict_color}; color: white; text-align: center;'>
             <h3>VERDICT: {results['final_prediction'].upper()}</h3>
-            <p>Confidence: {results['final_confidence'] * 100:.2f}%</p>
+            <p>Confidence: {results['final_confidence']*100:.2f}%</p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -632,23 +600,19 @@ def history_page():
 
             with tab1:
                 st.write("### Text Analysis")
-                st.progress(results['safe_conf_text'], text=f"Safe Content: {results['safe_conf_text'] * 100:.2f}%")
-                st.progress(results['harmful_conf_text'],
-                            text=f"Harmful Content: {results['harmful_conf_text'] * 100:.2f}%")
+                st.progress(results['safe_conf_text'], text=f"Safe Content: {results['safe_conf_text']*100:.2f}%")
+                st.progress(results['harmful_conf_text'], text=f"Harmful Content: {results['harmful_conf_text']*100:.2f}%")
 
                 st.write("### Highlighted Toxic Content")
                 st.markdown(f"<div style='font-size:16px;'>{results['highlighted_text']}</div>", unsafe_allow_html=True)
 
             with tab2:
                 st.write("### Visual Analysis")
-                st.progress(results['safe_score_resnet'],
-                            text=f"Safe Content: {results['safe_score_resnet'] * 100:.2f}%")
-                st.progress(results['harmful_score_resnet'],
-                            text=f"Harmful Content: {results['harmful_score_resnet'] * 100:.2f}%")
+                st.progress(results['safe_score_resnet'], text=f"Safe Content: {results['safe_score_resnet']*100:.2f}%")
+                st.progress(results['harmful_score_resnet'], text=f"Harmful Content: {results['harmful_score_resnet']*100:.2f}%")
 
                 # Display harmful frames if available
-                if ('harmful_frames' in results and results['harmful_frames']) or (
-                        'nsfw_frames' in results and results['nsfw_frames']):
+                if ('harmful_frames' in results and results['harmful_frames']) or ('nsfw_frames' in results and results['nsfw_frames']):
                     st.write("#### Detected Harmful Frames")
 
                     # Get the frames from either harmful_frames or nsfw_frames (for backward compatibility)
@@ -764,6 +728,19 @@ def history_page():
             with tab3:
                 st.write("### Transcription")
                 display_transcription_with_timestamps(results['transcription'], "video_player")
+
+            st.markdown('---')
+
+            if st.button("Generate PDF Report", type="primary"):
+                try:
+                    pdf_path = save_to_pdf(video_name, history_file)
+                    rel_path = os.path.relpath(pdf_path, start=os.getcwd())
+                    # Create a downloadable link
+                    st.success(f"PDF report generated successfully!")
+                    with st.expander("View PDF"):
+                        pdf_viewer(pdf_path)
+                except (FileNotFoundError, ValueError) as e:
+                    st.error(f"Error: {str(e)}")
     else:
         st.info("No processed videos found. Process some videos in the Upload tab first.")
 
@@ -832,4 +809,6 @@ def main():
 if __name__ == '__main__':
     main()
 
-### end
+
+### END
+### ________________________________________________________________

@@ -1,7 +1,8 @@
 ### src/proc_video.py
-### video frame extraction and processing
 
 
+### IMPORTS
+### ________________________________________________________________
 import cv2
 import ffmpeg
 import os
@@ -61,7 +62,7 @@ def extract_frames(video_path, output_dir, resnet_model, class_names, batch_size
                         "path": f"frame_{frame_index:04d}.jpg",
                         "type": "nsfw"
                     })
-                
+
                 # Store violence frames
                 if predicted_class_name == "violence" and confidence > 0.3:  # Same threshold for consistency
                     violence_frames.append({
@@ -78,7 +79,7 @@ def extract_frames(video_path, output_dir, resnet_model, class_names, batch_size
                     text_color = (0, 0, 255)  # Red
                 else:  # violence
                     text_color = (0, 165, 255)  # Orange in BGR
-                
+
                 bg_color = (0, 0, 0)  # Black background
                 text = f"Predicted: {predicted_class_name} ({confidence:.4f})"
 
@@ -111,13 +112,13 @@ def extract_frames(video_path, output_dir, resnet_model, class_names, batch_size
 
     # Select a subset of diverse violence frames if there are many
     selected_violence_frames = select_diverse_frames(violence_frames, max_frames=5)
-    
+
     # Combine both types of harmful frames
     harmful_frames = selected_nsfw_frames + selected_violence_frames
-    
+
     # Sort by frame number for chronological display
     harmful_frames.sort(key=lambda x: x["frame_number"])
-    
+
     return frame_count, predictions_per_frame, confidence_scores_by_class, harmful_frames
 
 def combine_frames_to_video(output_dir, output_video_path, frame_count, audio_path, frame_rate=30):
@@ -141,4 +142,5 @@ def combine_frames_to_video(output_dir, output_video_path, frame_count, audio_pa
     os.remove(temp_video_path)
 
 
-### end
+### END
+### ________________________________________________________________

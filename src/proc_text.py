@@ -1,7 +1,8 @@
 ### src/proc_text.py
-### text analysis and highlighting
 
 
+### IMPORTS
+### ________________________________________________________________
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -72,4 +73,5 @@ def highlight_toxic_words(text, inputs, attentions, tokenizer):
     return " ".join(highlighted_text)
 
 
-### end
+### END
+### ________________________________________________________________

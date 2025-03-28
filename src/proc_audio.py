@@ -1,7 +1,8 @@
 ### src/proc_audio.py
-### audio extraction and transcription
 
 
+### IMPORTS
+### ________________________________________________________________
 import ffmpeg
 from transformers import pipeline
 
@@ -60,4 +61,5 @@ def display_transcription_with_timestamps(transcription, video_id):
     st.markdown(f"<div style='font-size:18px;'>{formatted_transcription}</div>", unsafe_allow_html=True)
 
 
-### end
+### END
+### ________________________________________________________________
