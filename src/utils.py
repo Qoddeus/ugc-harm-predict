@@ -15,15 +15,15 @@ import torch.nn.functional as F
 import torchvision.transforms as transforms
 from fpdf import FPDF
 
-
-# Utility class for handling numpy types in JSON
 class NumpyTypeEncoder(json.JSONEncoder):
-  def default(self, obj):
-    if isinstance(obj, np.generic):
-      return obj.item()
-    elif isinstance(obj, np.ndarray):
-      return obj.tolist()
-    return json.JSONEncoder.default(self, obj)
+    def default(self, obj):
+        if isinstance(obj, (torch.Tensor, torch.nn.Parameter)):  # Handle PyTorch tensors
+            return obj.cpu().detach().numpy().tolist()
+        elif isinstance(obj, np.generic):
+            return obj.item()
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
 
 def sanitize_filename(filename):
   # Remove special characters, emojis, and spaces
@@ -90,6 +90,33 @@ def save_results(output_dir, video_name, results):
   with open(history_file, "w") as f:
     json.dump(history, f, cls=NumpyTypeEncoder, indent=4)
 
+def save_results(output_dir, video_name, results):
+    history_file = "./saves/processed_videos.json"
+    os.makedirs("./saves", exist_ok=True)
+
+    # Convert all tensors in results to serializable formats
+    serializable_results = {}
+    for key, value in results.items():
+        if isinstance(value, (torch.Tensor, torch.nn.Parameter)):
+            serializable_results[key] = value.cpu().detach().numpy().tolist()
+        elif isinstance(value, np.ndarray):
+            serializable_results[key] = value.tolist()
+        elif isinstance(value, (np.float32, np.float64)):
+            serializable_results[key] = float(value)
+        else:
+            serializable_results[key] = value
+
+    if os.path.exists(history_file):
+        with open(history_file, "r") as f:
+            history = json.load(f)
+    else:
+        history = {}
+
+    history[video_name] = serializable_results
+
+    with open(history_file, "w") as f:
+        json.dump(history, f, cls=NumpyTypeEncoder, indent=4)
+
 def weighted_fusion(bert_scores, resnet_scores, bert_weight=0.5, resnet_weight=0.5):
   safe_score = bert_weight * bert_scores['safe'] + resnet_weight * resnet_scores['safe']
   harmful_score = bert_weight * bert_scores['harmful'] + resnet_weight * resnet_scores['harmful']
@@ -100,7 +127,13 @@ def weighted_fusion(bert_scores, resnet_scores, bert_weight=0.5, resnet_weight=0
     return "Safe", safe_score
 
 def calculate_average_scores(confidence_scores_by_class):
-  return {class_name: (sum(scores) / len(scores) if scores else 0.0) for class_name, scores in confidence_scores_by_class.items()}
+    averages = {}
+    for class_name, scores in confidence_scores_by_class.items():
+        if isinstance(scores, (list, tuple)):  # If it's already a list
+            averages[class_name] = sum(scores) / len(scores) if scores else 0.0
+        else:  # If it's a single float/numpy value
+            averages[class_name] = float(scores)
+    return averages
 
 def save_to_pdf(video_name, history_file):  # Changed parameter name from result_path to history_file
     output_dir = os.path.join("saves", "reports", video_name)

@@ -123,24 +123,52 @@ def extract_frames(video_path, output_dir, resnet_model, class_names, batch_size
 
 def combine_frames_to_video(output_dir, output_video_path, frame_count, audio_path, frame_rate=30):
     temp_video_path = "./temp_video.mp4"
-    frame_example = cv2.imread(os.path.join(output_dir, "frame_0001.jpg"))
-    height, width, _ = frame_example.shape
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    video_writer = cv2.VideoWriter(temp_video_path, fourcc, frame_rate, (width, height))
 
+    # 1. Find the first valid frame to get dimensions
+    frame_example = None
     for i in range(1, frame_count + 1):
         frame_path = os.path.join(output_dir, f"frame_{i:04d}.jpg")
-        frame = cv2.imread(frame_path)
-        video_writer.write(frame)
+        if os.path.exists(frame_path):
+            frame_example = cv2.imread(frame_path)
+            if frame_example is not None:
+                break
+
+    # 2. Error if no frames found
+    if frame_example is None:
+        available_frames = [f for f in os.listdir(output_dir) if f.startswith('frame_')]
+        raise ValueError(
+            f"No valid frames found in {output_dir}. "
+            f"Expected {frame_count} frames. Found: {len(available_frames)}"
+        )
+
+    # 3. Get dimensions from first valid frame
+    height, width, _ = frame_example.shape
+
+    # 4. Initialize video writer
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    video_writer = cv2.VideoWriter(temp_video_path, fourcc, frame_rate, (width, height))
+
+    # 5. Write all valid frames
+    for i in range(1, frame_count + 1):
+        frame_path = os.path.join(output_dir, f"frame_{i:04d}.jpg")
+        if os.path.exists(frame_path):
+            frame = cv2.imread(frame_path)
+            if frame is not None:
+                video_writer.write(frame)
+            else:
+                print(f"Warning: Could not read frame {i} (corrupted file)")
+        else:
+            print(f"Warning: Missing frame {i}")
 
     video_writer.release()
 
+    # 6. Combine with audio (existing code)
     input_video = ffmpeg.input(temp_video_path)
     input_audio = ffmpeg.input(audio_path)
-    ffmpeg.output(input_video, input_audio, output_video_path, vcodec="h264", acodec="aac", strict="experimental").run()
+    ffmpeg.output(input_video, input_audio, output_video_path,
+                  vcodec='h264', acodec='aac').run()
 
     os.remove(temp_video_path)
-
 
 ### END
 ### ________________________________________________________________

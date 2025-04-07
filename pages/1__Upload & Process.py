@@ -1,3 +1,5 @@
+# pages/1__Upload & Process.py
+
 import os
 import json
 import streamlit as st
@@ -6,8 +8,8 @@ from src.models_load import load_models
 from src.proc_audio import extract_audio, transcribe_audio, display_transcription_with_timestamps
 from src.proc_text import classify_text
 from src.proc_video import extract_frames, combine_frames_to_video
-from src.utils import sanitize_filename, is_portrait_video, get_total_frames, calculate_average_scores, weighted_fusion, \
-    save_results
+from src.utils import sanitize_filename, is_portrait_video, get_total_frames, calculate_average_scores, weighted_fusion, save_results
+from src.proc_video_sequence import extract_frame_sequences
 
 
 # Upload and Process Page
@@ -32,6 +34,8 @@ whisper_model = models['whisper_model']
 resnet_model = models['resnet_model']
 class_names = models['class_names']
 device = models['device']
+
+
 
 # Initialize a key in session state to track if a video is uploaded
 if 'uploaded_video' not in st.session_state:
@@ -171,10 +175,18 @@ if st.session_state.uploaded_video is not None:
                     st.stop()
                 update_progress()
 
-            frame_count, predictions_per_frame, confidence_scores_by_class, harmful_frames = extract_frames(
-                video_path, frames_path, resnet_model, class_names,
+            frame_count, predictions_per_frame, confidence_scores_by_class, harmful_sequences = extract_frame_sequences(
+                video_path,
+                frames_path,
+                resnet_model,  # Now your ResNet-LSTM model
+                class_names,  # Should be ['NonViolence', 'Violence']
+                sequence_length=10,  # Match your model's expected sequence length
                 progress_callback=progress_with_cancel_check
             )
+
+            # Calculate final scores - adjust this based on your new model's outputs
+            harmful_score_resnet = confidence_scores_by_class.get('Violence', 0.0)
+            safe_score_resnet = confidence_scores_by_class.get('NonViolence', 0.0)
 
             # Check for cancel request before continuing
             if st.session_state.cancel_processing:
@@ -182,11 +194,14 @@ if st.session_state.uploaded_video is not None:
                 st.stop()
 
             # Calculate final scores
-            harmful_classes = ['nsfw', 'violence']
+            # harmful_classes = ['nsfw', 'violence']
+            harmful_classes = ['violence']
             safe_classes = ['safe']
             average_confidence_by_class = calculate_average_scores(confidence_scores_by_class)
-            harmful_score_resnet = sum(average_confidence_by_class[class_name] for class_name in harmful_classes) / len(harmful_classes)
-            safe_score_resnet = sum(average_confidence_by_class[class_name] for class_name in safe_classes) / len(safe_classes)
+
+            # With this (more robust version):
+            harmful_score_resnet = average_confidence_by_class.get('Violence', 0.0)
+            safe_score_resnet = average_confidence_by_class.get('NonViolence', 0.0)
 
             bert_scores = {'safe': safe_conf_text, 'harmful': harmful_conf_text}
             resnet_scores = {'safe': safe_score_resnet, 'harmful': harmful_score_resnet}
@@ -216,9 +231,6 @@ if st.session_state.uploaded_video is not None:
                 "final_confidence": final_confidence,
                 "transcription": transcription,
                 "highlighted_text": highlighted_text,
-                "harmful_frames": harmful_frames,  # Updated from nsfw_frames to harmful_frames
-                "nsfw_frames": [frame for frame in harmful_frames if frame.get('type') == 'nsfw' or 'type' not in frame],  # For backward compatibility
-                "frames_path": frames_path
             }
             save_results(output_dir, video_name, results)
 
@@ -290,6 +302,30 @@ if st.session_state.uploaded_video is not None:
                             untyped_frames = [frame for frame in frames_to_display if 'type' not in frame]
                             if untyped_frames:
                                 nsfw_frames.extend(untyped_frames)
+
+                            # In your visualization section:
+                            if harmful_sequences:
+                                st.write("### Detected Violent Sequences")
+
+                                for seq in harmful_sequences[:3]:  # Show first 3 sequences
+                                    cols = st.columns(3)
+
+                                    # Show start, middle, and end frames of the sequence
+                                    frames_to_show = [
+                                        seq['start_frame'],
+                                        (seq['start_frame'] + seq['end_frame']) // 2,
+                                        seq['end_frame']
+                                    ]
+
+                                    for i, frame_num in enumerate(frames_to_show):
+                                        frame_path = os.path.join(frames_path, f"frame_{frame_num:04d}.jpg")
+                                        if os.path.exists(frame_path):
+                                            with cols[i]:
+                                                st.image(
+                                                    frame_path,
+                                                    caption=f"Frame {frame_num} (Confidence: {seq['confidence']:.2f})",
+                                                    use_container_width=True
+                                                )
 
                             # Display NSFW frames if any
                             if nsfw_frames:
