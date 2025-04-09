@@ -6,6 +6,7 @@
 import random
 import streamlit as st
 from src.utils import create_clickable_blog_post_with_image, blog_posts
+from styles.styles import spacer
 
 
 def main():
@@ -45,6 +46,7 @@ def main():
     # Place the text in the left column
     with col1:
         st.text(" ")
+        spacer(30)
         st.markdown(text_content)
         # Button that redirects to the Upload & Process page (outside the columns)
         if st.button("Get Started", type="primary"):
