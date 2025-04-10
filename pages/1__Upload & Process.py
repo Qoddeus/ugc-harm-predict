@@ -8,7 +8,7 @@ from src.models_load import load_models
 from src.proc_audio import extract_audio, transcribe_audio, display_transcription_with_timestamps
 from src.proc_text import classify_text
 from src.proc_video import extract_frames, combine_frames_to_video
-from src.utils import sanitize_filename, is_portrait_video, get_total_frames, calculate_average_scores, weighted_fusion, save_results
+from src.utils import sanitize_filename, is_portrait_video, get_total_frames, calculate_average_scores, weighted_fusion, save_results, get_detected_sequences
 from src.proc_video_sequence import extract_frame_sequences
 
 
@@ -19,7 +19,7 @@ st.title("Upload & Process Video")
 
 # Add CSS to control video size
 st.markdown("""
-<style>
+<style> 
     .portrait-video video { max-height: 200px !important; margin: 0 auto; display: block; }
     .stImage { margin-bottom: 10px; }
     .stImage img { border-radius: 5px; border: 1px solid #ddd; }
@@ -184,6 +184,14 @@ if st.session_state.uploaded_video is not None:
                 progress_callback=progress_with_cancel_check
             )
 
+            # In your processing section, after defining frame_count:
+            gif_output_dir = os.path.join(output_dir, "detected_sequences")
+            current_sequence = []
+            current_preds = []
+            current_probs = []
+            current_frame_nums = []
+            sequence_id = 0
+
             # Calculate final scores - adjust this based on your new model's outputs
             harmful_score_resnet = confidence_scores_by_class.get('Violence', 0.0)
             safe_score_resnet = confidence_scores_by_class.get('NonViolence', 0.0)
@@ -280,146 +288,27 @@ if st.session_state.uploaded_video is not None:
 
                 with st.expander("🎬 Visual Analysis"):
                     st.write("#### Visual Classification")
-                    st.progress(results['safe_score_resnet'], text=f"Safe Content: {results['safe_score_resnet']*100:.2f}%")
-                    st.progress(results['harmful_score_resnet'], text=f"Harmful Content: {results['harmful_score_resnet']*100:.2f}%")
+                    st.progress(results['safe_score_resnet'], text=f"Safe: {results['safe_score_resnet'] * 100:.2f}%")
+                    st.progress(results['harmful_score_resnet'],
+                                text=f"Violent: {results['harmful_score_resnet'] * 100:.2f}%")
 
-                    # Display harmful frames if available
-                    if ('harmful_frames' in results and results['harmful_frames']) or ('nsfw_frames' in results and results['nsfw_frames']):
-                        st.write("#### Detected Harmful Frames")
+                    sequences = get_detected_sequences(output_dir)
+                    if sequences:
+                        st.write(f"**Detected {len(sequences)} violent sequences**")
 
-                        # Get the frames from either harmful_frames or nsfw_frames (for backward compatibility)
-                        frames_to_display = results.get('harmful_frames', results.get('nsfw_frames', []))
-
-                        # Check if frames have type attribute
-                        has_type_attribute = any('type' in frame for frame in frames_to_display)
-
-                        if has_type_attribute:
-                            # Group frames by type
-                            nsfw_frames = [frame for frame in frames_to_display if frame.get('type') == 'nsfw']
-                            violence_frames = [frame for frame in frames_to_display if frame.get('type') == 'violence']
-
-                            # Handle frames without type (legacy data) - assume they are NSFW
-                            untyped_frames = [frame for frame in frames_to_display if 'type' not in frame]
-                            if untyped_frames:
-                                nsfw_frames.extend(untyped_frames)
-
-                            # In your visualization section:
-                            if harmful_sequences:
-                                st.write("### Detected Violent Sequences")
-
-                                for seq in harmful_sequences[:3]:  # Show first 3 sequences
-                                    cols = st.columns(3)
-
-                                    # Show start, middle, and end frames of the sequence
-                                    frames_to_show = [
-                                        seq['start_frame'],
-                                        (seq['start_frame'] + seq['end_frame']) // 2,
-                                        seq['end_frame']
-                                    ]
-
-                                    for i, frame_num in enumerate(frames_to_show):
-                                        frame_path = os.path.join(frames_path, f"frame_{frame_num:04d}.jpg")
-                                        if os.path.exists(frame_path):
-                                            with cols[i]:
-                                                st.image(
-                                                    frame_path,
-                                                    caption=f"Frame {frame_num} (Confidence: {seq['confidence']:.2f})",
-                                                    use_container_width=True
-                                                )
-
-                            # Display NSFW frames if any
-                            if nsfw_frames:
-                                st.write("##### NSFW Content")
-                                cols_per_row = 3
-
-                                # Process frames in groups of 3
-                                for i in range(0, len(nsfw_frames), cols_per_row):
-                                    # Create a row with 3 columns
-                                    cols = st.columns(cols_per_row)
-
-                                    # Fill each column with a frame
-                                    for col_idx in range(cols_per_row):
-                                        frame_idx = i + col_idx
-
-                                        # Check if we still have frames to display
-                                        if frame_idx < len(nsfw_frames):
-                                            frame = nsfw_frames[frame_idx]
-                                            frame_path = os.path.join(results.get('frames_path', ''), frame['path'])
-
-                                            # Display frame in the respective column
-                                            with cols[col_idx]:
-                                                if os.path.exists(frame_path):
-                                                    st.image(
-                                                        frame_path,
-                                                        caption=f"Frame {frame['frame_number']} - Confidence: {frame['confidence']:.2f}",
-                                                        use_container_width=True
-                                                    )
-                                                else:
-                                                    st.warning(f"Frame {frame['frame_number']} not found")
-
-                            # Display violence frames if any
-                            if violence_frames:
-                                st.write("##### Violence Content")
-                                cols_per_row = 3
-
-                                # Process frames in groups of 3
-                                for i in range(0, len(violence_frames), cols_per_row):
-                                    # Create a row with 3 columns
-                                    cols = st.columns(cols_per_row)
-
-                                    # Fill each column with a frame
-                                    for col_idx in range(cols_per_row):
-                                        frame_idx = i + col_idx
-
-                                        # Check if we still have frames to display
-                                        if frame_idx < len(violence_frames):
-                                            frame = violence_frames[frame_idx]
-                                            frame_path = os.path.join(results.get('frames_path', ''), frame['path'])
-
-                                            # Display frame in the respective column
-                                            with cols[col_idx]:
-                                                if os.path.exists(frame_path):
-                                                    st.image(
-                                                        frame_path,
-                                                        caption=f"Frame {frame['frame_number']} - Confidence: {frame['confidence']:.2f}",
-                                                        use_container_width=True
-                                                    )
-                                                else:
-                                                    st.warning(f"Frame {frame['frame_number']} not found")
-                        else:
-                            # Display all frames without categorization (legacy approach)
-                            st.write("##### Harmful Content")
-                            cols_per_row = 3
-
-                            # Process frames in groups of 3
-                            for i in range(0, len(frames_to_display), cols_per_row):
-                                # Create a row with 3 columns
-                                cols = st.columns(cols_per_row)
-
-                                # Fill each column with a frame
-                                for col_idx in range(cols_per_row):
-                                    frame_idx = i + col_idx
-
-                                    # Check if we still have frames to display
-                                    if frame_idx < len(frames_to_display):
-                                        frame = frames_to_display[frame_idx]
-                                        frame_path = os.path.join(results.get('frames_path', ''), frame['path'])
-
-                                        # Display frame in the respective column
-                                        with cols[col_idx]:
-                                            if os.path.exists(frame_path):
-                                                st.image(
-                                                    frame_path,
-                                                    caption=f"Frame {frame['frame_number']} - Confidence: {frame['confidence']:.2f}",
-                                                    use_container_width=True
-                                                )
-                                            else:
-                                                st.warning(f"Frame {frame['frame_number']} not found")
-
-                        if not frames_to_display:
-                            st.info("No harmful frames detected in this video")
+                        # Display GIFs in rows of 2
+                        for i in range(0, len(sequences), 2):
+                            cols = st.columns(2)
+                            for col_idx in range(2):
+                                if i + col_idx < len(sequences):
+                                    with cols[col_idx]:
+                                        st.markdown(f"**Sequence {i + col_idx + 1}**")
+                                        st.image(
+                                            sequences[i + col_idx]['gif_path'],
+                                            use_column_width=True
+                                        )
                     else:
-                        st.info("No harmful frames detected in this video")
+                        st.info("No violent sequences detected")
 
                 with st.expander("🔊 Transcription"):
                     display_transcription_with_timestamps(results['transcription'], "video_player")

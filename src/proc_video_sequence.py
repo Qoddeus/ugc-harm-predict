@@ -6,16 +6,19 @@ import numpy as np
 import torch
 from torchvision import transforms
 from PIL import Image
-from src.utils import preprocess_image
+from src.utils import preprocess_image, save_sequence_as_gif
 
 
-def extract_frame_sequences(video_path, output_dir, model, class_names, sequence_length=10, batch_size=1,
-                          progress_callback=None):
+def extract_frame_sequences(video_path, output_dir, model, class_names, sequence_length=10,
+                          batch_size=1, progress_callback=None):
     os.makedirs(output_dir, exist_ok=True)
     cap = cv2.VideoCapture(video_path)
+    fps = cap.get(cv2.CAP_PROP_FPS)  # Get frames per second
+    video_name = os.path.splitext(os.path.basename(video_path))[0]  # Get video name
 
     frame_count = 0
     sequence_buffer = []
+    harmful_sequences = []
     predictions_per_frame = []
     confidence_scores_by_class = {class_name: [] for class_name in class_names}  # This is correct
     violence_sequences = []
@@ -34,6 +37,15 @@ def extract_frame_sequences(video_path, output_dir, model, class_names, sequence
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frame = Image.fromarray(frame)
         return transform(frame)
+
+        # Add GIF tracking variables
+
+    gif_output_dir = os.path.join(output_dir, "detected_sequences")
+    current_sequence = []
+    current_preds = []
+    current_probs = []
+    current_frame_nums = []
+    sequence_id = 0
 
     while True:
         ret, frame = cap.read()
@@ -63,6 +75,25 @@ def extract_frame_sequences(video_path, output_dir, model, class_names, sequence
             # This is safe because we initialized it as a list
             confidence_scores_by_class[predicted_class_name].append(confidence)
 
+            if pred == 1:  # Violence detected
+                current_sequence.append(frame.copy())
+                current_preds.append(pred)
+                current_probs.append(confidence)
+                current_frame_nums.append(frame_count)
+            elif len(current_sequence) >= sequence_length:
+                # Save completed violence sequence
+                gif_path = save_sequence_as_gif(
+                    current_sequence, current_preds, current_probs,
+                    current_frame_nums, fps, gif_output_dir,
+                    sequence_id, video_name, class_names
+                )
+                print(f"Saved sequence {sequence_id} to {gif_path}")
+                sequence_id += 1
+                current_sequence = []
+                current_preds = []
+                current_probs = []
+                current_frame_nums = []
+
             if predicted_class_name == "Violence" and confidence > 0.5:
                 violence_sequences.append({
                     "start_frame": frame_count - sequence_length + 1,
@@ -91,4 +122,12 @@ def extract_frame_sequences(video_path, output_dir, model, class_names, sequence
         for class_name, scores in confidence_scores_by_class.items()
     }
 
-    return frame_count, predictions_per_frame, avg_confidence, violence_sequences
+    # Save any remaining sequence at the end
+    if len(current_sequence) >= sequence_length:
+        gif_path = save_sequence_as_gif(
+            current_sequence, current_preds, current_probs,
+            current_frame_nums, fps, gif_output_dir,
+            sequence_id, video_name, class_names
+        )
+
+    return frame_count, predictions_per_frame, confidence_scores_by_class, harmful_sequences

@@ -1,6 +1,9 @@
 import streamlit as st
+from styles.styles import spacer
 
 st.title("Threshold Settings")
+
+spacer(60)
 
 DEFAULT_WEIGHT_VALUE = 5
 DEFAULT_CONFIDENCE_VALUE = 30
@@ -62,54 +65,83 @@ def reset_defaults():
 if st.button("Reset to Default"):
     reset_defaults()
 
-st.subheader("Late Fusion Weights:")
+st.subheader("Late Fusion Weights")
 
 # Slider 1 (using temporary value)
 st.slider(
-    "**Visual Weight**",
+    "**Visual Weight:**",
     min_value=0,
     max_value=10,
     value=st.session_state['temp_visual_weight'],
     key="temp_visual_weight",
     on_change=update_temp_textual_weight,  # Now updates the *other* temp value
+    help="The weight given to visual features in the late fusion process, The higher the value the more priority (0-10)."
+         "\n\nDefault value is 5.",
 )
+
+
+spacer(20)
+
 
 # Slider 2 (using temporary value)
 st.slider(
-    "**Textual Weight**",
+    "**Textual Weight:**",
     min_value=0,
     max_value=10,
     value=st.session_state['temp_textual_weight'],
     key="temp_textual_weight",
     on_change=update_temp_visual_weight,  # Now updates the *other* temp value
+    help="The weight given to textual features in the late fusion process, The higher the value the more priority (0-10)."
+         "\n\nDefault value is 5.",
 )
 
-st.subheader("Confidence Thresholds:")
+st.write("---")
+
+st.subheader("Confidence Thresholds")
 
 # Slider 3 (CNN Confidence)
 st.slider(
-    "**CNN Confidence Threshold**",
+    "**Resnet Confidence Threshold:**",
     min_value=1,
     max_value=100,
     value=st.session_state['temp_cnn_confidence'],
     key="temp_cnn_confidence",
+    help="The minimum confidence score required to be considered harmful imagery (0-100)."
+         "\n\nDefault value is 30."
     # No on_change needed as it's independent
 )
 
+
+spacer(20)
+
+
 # Slider 4 (BERT Confidence)
 st.slider(
-    "**BERT Confidence Threshold**",
+    "**BERT Confidence Threshold:**",
     min_value=1,
     max_value=100,
     value=st.session_state['temp_bert_confidence'],
     key="temp_bert_confidence",
+    help="The minimum confidence score required to be considered detect harmful text (0-100)."
+         "\n\nDefault value is 30."
     # No on_change needed as it's independent
 )
+
+
+# Add a spacer with a specific height
+spacer1 = st.empty()
+spacer1.write("")  # Initially empty
+spacer1.markdown("<div style='padding-top: 40px;'></div>", unsafe_allow_html=True)
+
 
 col1, col2 = st.columns(2)
 with col1:
     if st.button("Save Settings"):
         save_settings()
+
+
+spacer(20)
+
 
 # Display the current saved values
 st.subheader("Current Saved Values:")

@@ -4,16 +4,66 @@
 ### IMPORTS
 ### ________________________________________________________________
 import cv2
-import ffmpeg
 import json
 import os
 import re
 import torch
 import numpy as np
 import streamlit as st
-import torch.nn.functional as F
 import torchvision.transforms as transforms
 from fpdf import FPDF
+from PIL import Image
+import imageio
+from datetime import timedelta
+
+def add_annotation_to_frame(frame, pred, prob, frame_count, fps, class_names):
+    """Add prediction overlay to a frame (same as inference code)"""
+    timestamp = str(timedelta(seconds=frame_count / fps)).split('.')[0]
+    annotated_frame = frame.copy()
+    height, width = annotated_frame.shape[:2]
+
+    label = f"{class_names[pred]} ({prob:.2f})"
+    color = (0, 255, 0) if pred == 0 else (0, 0, 255)  # Green/Red
+
+    cv2.putText(annotated_frame, label, (50, 50),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2, cv2.LINE_AA)
+    cv2.putText(annotated_frame, f"Time: {timestamp}", (50, 100),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+    cv2.putText(annotated_frame, f"Frame: {frame_count}", (50, height - 50),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+    return annotated_frame
+
+
+def save_sequence_as_gif(frames, preds, probs, frame_numbers, fps, output_dir, sequence_id, video_name, class_names):
+    """Save an annotated sequence as GIF"""
+    os.makedirs(output_dir, exist_ok=True)
+    gif_path = os.path.join(output_dir, f"{video_name}_seq_{sequence_id}_{class_names[preds[-1]]}.gif")
+
+    pil_frames = []
+    for i, frame in enumerate(frames):
+        annotated_frame = add_annotation_to_frame(
+            frame, preds[i], probs[i], frame_numbers[i], fps, class_names
+        )
+        img = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
+
+        # Check aspect ratio of the original frame
+        height, width = frame.shape[:2]
+        is_portrait = height > width
+
+        # Resize based on aspect ratio
+        if is_portrait:
+            # Portrait (9:16) - maintain height but adjust width
+            target_height = 480
+            target_width = int(target_height * width / height)
+            pil_frames.append(Image.fromarray(img).resize((target_width, target_height)))
+        else:
+            # Landscape (16:9)
+            target_width = 480
+            target_height = 270
+            pil_frames.append(Image.fromarray(img).resize((target_width, target_height)))
+
+    imageio.mimsave(gif_path, pil_frames, duration=200, loop=0)
+    return gif_path
 
 class NumpyTypeEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -70,25 +120,6 @@ def select_diverse_frames(nsfw_frames, max_frames=5):
     remaining_slots -= 1
 
   return selected
-
-def save_results(output_dir, video_name, results):
-  history_file = "./saves/processed_videos.json"
-
-  # Ensure saves directory exists
-  os.makedirs("./saves", exist_ok=True)
-
-  # Load existing history if available
-  if os.path.exists(history_file):
-    with open(history_file, "r") as f:
-      history = json.load(f)
-  else:
-    history = {}
-
-  # Save results for this video
-  history[video_name] = results
-
-  with open(history_file, "w") as f:
-    json.dump(history, f, cls=NumpyTypeEncoder, indent=4)
 
 def save_results(output_dir, video_name, results):
     history_file = "./saves/processed_videos.json"
@@ -199,6 +230,22 @@ def is_portrait_video(video_path):
         return height > width
     cap.release()
     return False
+
+def get_detected_sequences(output_dir):
+    """Find all saved GIFs in the processed_frames/detected_sequences subfolder"""
+    # Look in the correct nested directory structure
+    gif_dir = os.path.join(output_dir, "processed_frames", "detected_sequences")
+    if not os.path.exists(gif_dir):
+        return []
+
+    return [
+        {
+            'gif_path': os.path.join(gif_dir, f),
+            'name': f.replace('.gif', '')
+        }
+        for f in sorted(os.listdir(gif_dir))
+        if f.endswith('.gif')
+    ]
 
 def create_clickable_blog_post_with_image(title, url, summary, image_url, fixed_width="500px", fixed_height="400px"):
     # Creates a clickable blog post element with an image preview and fixed size.
