@@ -10,7 +10,7 @@ from src.models_def import BertClassifier, ResNetModel, ResNetLSTMModel
 def load_models():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     bert_model_path = "./models/bert.pth"
-    resnet_lstm_model_path = "./models/resnet50-lstm.pt"  # Your ResNet-LSTM model
+    resnet_lstm_model_path = "./models/resnet50-lstm5.pt"  # Your ResNet-LSTM model
     class_names = ['Safe', 'Violence']  # Updated class names
 
     # Load BERT model (unchanged)

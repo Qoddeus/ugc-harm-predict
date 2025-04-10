@@ -1,7 +1,7 @@
 import streamlit as st
 from styles.styles import spacer
 
-st.title("Threshold Settings")
+st.title("Threshold Settings (Not functional yet)")
 
 spacer(60)
 
