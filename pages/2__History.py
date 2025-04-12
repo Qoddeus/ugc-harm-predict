@@ -98,7 +98,7 @@ if os.path.exists(history_file):
                                 st.markdown(f"**Sequence {i + col_idx + 1}**")
                                 st.image(
                                     sequences[i + col_idx]['gif_path'],
-                                    use_column_width=True
+                                    use_container_width=True
                                 )
             else:
                 st.info("No violent sequences detected")

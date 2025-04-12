@@ -179,8 +179,8 @@ if st.session_state.uploaded_video is not None:
                 video_path,
                 frames_path,
                 resnet_model,  # Now your ResNet-LSTM model
-                class_names,  # Should be ['NonViolence', 'Violence']
-                sequence_length=10,  # Match your model's expected sequence length
+                class_names,
+                sequence_length=16,  # Match your model's expected sequence length
                 progress_callback=progress_with_cancel_check
             )
 
@@ -194,7 +194,7 @@ if st.session_state.uploaded_video is not None:
 
             # Calculate final scores - adjust this based on your new model's outputs
             harmful_score_resnet = confidence_scores_by_class.get('Violence', 0.0)
-            safe_score_resnet = confidence_scores_by_class.get('NonViolence', 0.0)
+            safe_score_resnet = confidence_scores_by_class.get('Safe', 0.0)
 
             # Check for cancel request before continuing
             if st.session_state.cancel_processing:
@@ -209,7 +209,7 @@ if st.session_state.uploaded_video is not None:
 
             # With this (more robust version):
             harmful_score_resnet = average_confidence_by_class.get('Violence', 0.0)
-            safe_score_resnet = average_confidence_by_class.get('NonViolence', 0.0)
+            safe_score_resnet = average_confidence_by_class.get('Safe', 0.0)
 
             bert_scores = {'safe': safe_conf_text, 'harmful': harmful_conf_text}
             resnet_scores = {'safe': safe_score_resnet, 'harmful': harmful_score_resnet}
@@ -305,7 +305,7 @@ if st.session_state.uploaded_video is not None:
                                         st.markdown(f"**Sequence {i + col_idx + 1}**")
                                         st.image(
                                             sequences[i + col_idx]['gif_path'],
-                                            use_column_width=True
+                                            use_container_width=True
                                         )
                     else:
                         st.info("No violent sequences detected")

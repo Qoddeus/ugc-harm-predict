@@ -11,7 +11,7 @@ from styles.styles import spacer
 
 def main():
     st.set_page_config(
-        page_title='Harmful Content Detection',
+        page_title='BuddyGuard',
         page_icon='🕵️‍♂️',
         layout='wide',
         initial_sidebar_state='expanded',
@@ -21,6 +21,20 @@ def main():
             'About': None
         }
     )
+
+    # main.py
+    pages = st.source_util.get_pages('main.py')
+    new_page_names = {
+        'main': 'Home',
+        '1__Upload & Process': '1__Upload & Process',
+        '2__History': '2__History',
+        '3__About': '3__About',
+        '4__Settings': '4__Settings',
+    }
+
+    for key, page in pages.items():
+        if page['page_name'] in new_page_names:
+            page['page_name'] = new_page_names[page['page_name']]
 
     # Center the image
     st.markdown(
@@ -48,10 +62,8 @@ def main():
         st.text(" ")
         spacer(30)
         st.markdown(text_content)
-        # Button that redirects to the Upload & Process page (outside the columns)
         if st.button("Get Started", type="primary"):
-            st.session_state.page = "Upload & Process"
-            st.rerun()
+            st.switch_page("pages/1__Upload & Process.py")  # Direct page switch
 
     # Center the image within the right column
     with col2:
