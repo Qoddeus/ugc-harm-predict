@@ -1,5 +1,7 @@
 # ugc-harm-predict
 
+Settings.py not functional yet
+
 create models directory then put these models inside 
 
 Download resnet50-lstm_10epoch.pt for the latest model so far
